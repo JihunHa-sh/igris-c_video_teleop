@@ -1,0 +1,66 @@
+# HANGER ONLY: the person drives the whole body incl. legs, robot in Low Level Joint Control.
+# There is NO balance controller in this mode - the robot must hang with its feet off the ground.
+# Every value can be overridden on the command line of scripts/run_teleop.py where noted.
+
+stream:
+  addr: tcp://172.27.190.164:5556     # Fast-SAM publisher on the GPU PC (ailab). --addr
+  topic: pose
+  hold_after: 0.25                    # s without a new pose -> freeze the target
+  pause_after: 1.0                    # s without a new pose -> PAUSE (ENTER to re-engage)
+
+robot:
+  domain_id: 0
+  namespace: igris_c_IG20
+  required_control_state: [LOW]       # Low Level Joint Control (ros_service 15); never with feet on the ground
+
+# Joints the person drives. Group names (waist, left_arm, right_arm, neck) or SDK joint names.
+# Everything else gets kp=kd=0 in LowCmd (walk controller keeps the legs).
+drive: [waist, left_arm, right_arm, left_leg, right_leg, neck]
+
+# Per-joint shaping, applied to the retargeted angle:  q = sign * scale * q_retarget + offset
+# then clipped to [limit_min, limit_max] (defaults: SDK limits) shrunk by limit_margin.
+shaping:
+  Waist_Roll:  {scale: 0.5}           # people sway more than the robot should
+  Waist_Pitch: {scale: 0.7}
+  Neck_Yaw:   {scale: 0.0}            # neck held straight (signs not verified on the robot)
+  Neck_Pitch: {scale: 0.0}
+limit_margin: 0.05                    # rad, kept away from every joint limit
+
+gripper:                              # 1-DoF grippers (SDK ids 21 = left, 11 = right), 0 = open .. 1 = closed
+  mode: hand                          # hand: make a fist = CLOSE, open your hand = OPEN | key: z / x toggle
+  close_above: 0.6                    # hand_closure (0 open .. 1 fist) above this -> CLOSE
+  open_below: 0.35                    # below this -> OPEN (gap = no chattering on a half-closed hand)
+  hold_s: 0.15                        # the hand must stay past the threshold this long
+  open_q: 0.0                         # HandCmd q sent for OPEN
+  close_q: 1.0                        # HandCmd q sent for CLOSE (teleop data range 0..1)
+
+filter:                               # One Euro filter on the retargeted angles
+  min_cutoff: 1.5                     # Hz; lower = smoother, more lag
+  beta: 0.4                           # higher = less lag on fast motion
+  d_cutoff: 1.0
+
+control:
+  rate_hz: 50                         # retarget/target update rate
+  command_hz: 300                     # LowCmd streaming rate (interpolated)
+  hand_hz: 50
+  engage_ramp_s: 5.0                  # blend from the robot pose to the person's pose on ENTER
+  return_s: 4.0                       # back to the initial pose on quit
+  max_vel:                            # rad/s (velocity limit inside the commander)
+    waist: 0.8
+    arm: 2.5
+    wrist: 3.0
+    neck: 1.5
+    leg: 1.5
+  max_hand_vel: 3.0                   # gripper units/s (0 = open, 1 = closed)
+
+gains:                                # legs + neck: igris_c_sdk_public sdk_gui_client.py DEFAULT_KP/KD
+  kp: {Hip_Pitch_L: 500.0, Hip_Roll_L: 200.0, Hip_Yaw_L: 50.0, Knee_Pitch_L: 500.0, Ankle_Pitch_L: 50.0, Ankle_Roll_L: 50.0,
+       Hip_Pitch_R: 500.0, Hip_Roll_R: 200.0, Hip_Yaw_R: 50.0, Knee_Pitch_R: 500.0, Ankle_Pitch_R: 50.0, Ankle_Roll_R: 50.0,
+       Neck_Yaw: 2.0, Neck_Pitch: 5.0}
+  kd: {Hip_Pitch_L: 3.0, Hip_Roll_L: 0.5, Hip_Yaw_L: 0.5, Knee_Pitch_L: 3.0, Ankle_Pitch_L: 3.0, Ankle_Roll_L: 3.0,
+       Hip_Pitch_R: 3.0, Hip_Roll_R: 0.5, Hip_Yaw_R: 0.5, Knee_Pitch_R: 3.0, Ankle_Pitch_R: 3.0, Ankle_Roll_R: 3.0,
+       Neck_Yaw: 0.05, Neck_Pitch: 0.1}
+
+safety:
+  max_tracking_error: 0.8             # rad, |command - measured| -> PAUSE
+  max_state_age: 0.2                  # s, LowState freshness

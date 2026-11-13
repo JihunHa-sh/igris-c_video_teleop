@@ -1,0 +1,3 @@
+# RealSense serials, main camera (facing you) first, comma separated
+# D555 x2 over PoE (checked 2026-11-12). Swap the order if 254922303155 is the front camera.
+254822300448,254922303155
